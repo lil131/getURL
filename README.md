@@ -13,6 +13,7 @@ The above command will create a binary executable file `getURL` in the current d
 ```
 ./getURL --url <your_url>
 ```
+Or use `go run getURL.go` without building it.
 
 ## CLI tool
 
