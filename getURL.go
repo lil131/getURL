@@ -93,9 +93,9 @@ func requestTo(host string, path string, channel chan Profile) {
 	fmt.Fprintf(conn, method+path+protocol+header+host+tail)
 	reader := bufio.NewReader(conn)
 	var output string
-	var cLen int64
 	var totalLen int64
 	var status int
+	var cLen = int64(-1)
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -103,7 +103,6 @@ func requestTo(host string, path string, channel chan Profile) {
 			fmt.Println(err)
 			return
 		}
-
 		if len(output) == 0 {
 			status, err = strconv.Atoi(line[9:12])
 			if err != nil {
@@ -132,10 +131,9 @@ func requestTo(host string, path string, channel chan Profile) {
 		sb := new(strings.Builder)
 		io.CopyN(sb, reader, cLen)
 		output += sb.String()
-	} else {
+	} else if cLen == -1 {
 		for {
 			line, _ := reader.ReadString('\n') // read the chunk size in hex
-
 			cSize, err := strconv.ParseInt(strings.TrimRight(line, "\r\n"), 16, 64)
 			if err != nil {
 				fmt.Println(err)
@@ -174,6 +172,7 @@ func getProfile(t int, host string, path string) {
 	channel := make(chan Profile)
 	times := make([]int64, t)
 	var errorCodes []int
+	var errors string
 	var smallest int
 	var largest int
 	var fastest int64
@@ -206,14 +205,25 @@ func getProfile(t int, host string, path string) {
 
 	sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
 
-	fmt.Println("The number of requests: ", t)
-	fmt.Println("The fastest time: ", fastest, "Milliseconds")
-	fmt.Println("The slowest time: ", slowest, "Milliseconds")
-	fmt.Println("The mean & median times: ", mean(times), "Milliseconds, ", median(times), "Milliseconds")
-	fmt.Println("The percentage of requests that succeeded: ", math.Round(float64(t-len(errorCodes))/float64(t)*100), "%")
-	fmt.Println("Any error codes returned that weren't a success: ", errorCodes)
-	fmt.Println("The size in bytes of the smallest response: ", smallest, "bytes")
-	fmt.Println("The size in bytes of the largest response: ", largest, "bytes")
+	if len(errorCodes) == 0 {
+		errors = "None"
+	} else {
+		var tmp []string
+		for i := range errorCodes {
+			code := strconv.Itoa(errorCodes[i])
+			tmp = append(tmp, code)
+		}
+		errors = strings.Join(tmp, ", ")
+	}
+
+	fmt.Println("The number of requests:", t)
+	fmt.Println("The fastest time:", fastest, "Milliseconds")
+	fmt.Println("The slowest time:", slowest, "Milliseconds")
+	fmt.Println("The mean & median times:", mean(times), "Milliseconds,", median(times), "Milliseconds")
+	fmt.Println("The percentage of requests that succeeded:", math.Round(float64(t-len(errorCodes))/float64(t)*100), "%")
+	fmt.Println("Any error codes returned that weren't a success:", errors)
+	fmt.Println("The size in bytes of the smallest response:", smallest, "bytes")
+	fmt.Println("The size in bytes of the largest response:", largest, "bytes")
 
 	return
 }
