@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 	"os"
 	"sort"
 	"strconv"
@@ -57,12 +58,19 @@ func main() {
 }
 
 func getRes(c *cli.Context) error {
-	t := c.String("profile")
-	connect := c.String("url")
-	url := strings.SplitN(connect, "/", 2)
 	var host string
 	var path string
+	var ishttps = true
 
+	t := c.String("profile")
+	connect := strings.ToLower(c.String("url"))
+	if strings.HasPrefix(connect, "http://") {
+		connect = strings.TrimPrefix(connect, "http://")
+		ishttps = false
+	} else if strings.HasPrefix(connect, "https://") {
+		connect = strings.TrimPrefix(connect, "https://")
+	}
+	url := strings.SplitN(connect, "/", 2)
 	if len(url) == 2 {
 		host, path = url[0], "/"+url[1]
 	} else {
@@ -70,28 +78,43 @@ func getRes(c *cli.Context) error {
 	}
 
 	if t == "0" {
-		requestTo(host, path, nil)
+		requestTo(ishttps, host, path, nil)
 	} else {
 		t, err := strconv.Atoi(t)
 		if err != nil {
 			fmt.Println(err)
 			return nil
 		}
-		getProfile(t, host, path)
+		getProfile(t, host, path, ishttps)
 	}
 	return nil
 }
 
-func requestTo(host string, path string, channel chan Profile) {
+func requestTo(ishttps bool, host string, path string, channel chan Profile) {
+	var tlsConn *tls.Conn
+	var netConn net.Conn
+	var err error
+	var reader *bufio.Reader
 	start := time.Now()
-	conn, err := tls.Dial("tcp", host+":443", nil)
-	if err != nil {
-		fmt.Println(err)
-		return
+
+	if ishttps {
+		tlsConn, err = tls.Dial("tcp", host+":443", nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Fprintf(tlsConn, method+path+protocol+header+host+tail)
+		reader = bufio.NewReader(tlsConn)
+	} else {
+		netConn, err = net.Dial("tcp", host+":80")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Fprintf(netConn, method+path+protocol+header+host+tail)
+		reader = bufio.NewReader(netConn)
 	}
 
-	fmt.Fprintf(conn, method+path+protocol+header+host+tail)
-	reader := bufio.NewReader(conn)
 	var output string
 	var totalLen int64
 	var status int
@@ -127,7 +150,7 @@ func requestTo(host string, path string, channel chan Profile) {
 		}
 	}
 
-	if cLen != 0 {
+	if cLen > 0 {
 		sb := new(strings.Builder)
 		io.CopyN(sb, reader, cLen)
 		output += sb.String()
@@ -159,11 +182,16 @@ func requestTo(host string, path string, channel chan Profile) {
 		channel <- Profile{status, elapsed, len(output)}
 	}
 
-	conn.Close()
+	if ishttps {
+		tlsConn.Close()
+	} else {
+		netConn.Close()
+	}
+
 	return
 }
 
-func getProfile(t int, host string, path string) {
+func getProfile(t int, host string, path string, ishttps bool) {
 	if t <= 0 {
 		fmt.Println("Please enter an positive integer.")
 		return
@@ -179,7 +207,7 @@ func getProfile(t int, host string, path string) {
 	var slowest int64
 
 	for i := 0; i < t; i++ {
-		go requestTo(host, path, channel)
+		go requestTo(ishttps, host, path, channel)
 	}
 
 	for i := 0; i < t; i++ {
