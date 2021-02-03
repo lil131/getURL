@@ -1,7 +1,7 @@
 # getURL
 
 ## Instruction
-This is a GO program that makes a request to the URL you provided using sockets directly instead of a library that handles the HTTP/HTTPS request.
+This is a GO program that makes a request to the URL that user provided using sockets directly instead of a library that handles the HTTP/HTTPS request.
 
 ### build
 To create a binary executable file, use the following command line:
